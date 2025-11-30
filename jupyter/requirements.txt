@@ -1,0 +1,14 @@
+pandas
+pyarrow
+fastparquet
+requests
+python-dotenv
+yfinance
+psycopg2-binary
+pyyaml>=6.0
+great_expectations
+jinja2>=3.1.0
+pyarrow>=15.0.0
+requests>=2.31.0
+pytest>=7.0.0
+lxml

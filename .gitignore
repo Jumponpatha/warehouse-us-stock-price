@@ -1,0 +1,53 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+
+# Airflow logs and temporary files
+airflow/logs/
+airflow/plugins/
+airflow/data/
+airflow/config/airflow.cfg
+airflow/.env
+
+# Jupyter checkpoints
+notebooks/.ipynb_checkpoints/
+
+# Jupyter workspace
+notebooks/work/data/
+notebooks/work/__pycache__/
+
+# DBT artifacts
+airflow/dbt/target/
+airflow/dbt/dbt_packages/
+
+# Postgres database volumes
+postgres-db-volume/
+postgres-warehouse-volume/
+
+# PGAdmin data
+pgadmin-data/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# Environment files (secrets)
+.env
+.env.*
+
+notebooks/.ipynb_checkpoints/
+venv
