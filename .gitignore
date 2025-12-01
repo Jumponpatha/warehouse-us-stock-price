@@ -11,6 +11,7 @@ airflow/plugins/
 airflow/data/
 airflow/config/airflow.cfg
 airflow/.env
+airflow/.pytest_cache
 
 # Jupyter checkpoints
 notebooks/.ipynb_checkpoints/
