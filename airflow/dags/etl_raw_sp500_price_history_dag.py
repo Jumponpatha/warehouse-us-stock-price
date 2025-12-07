@@ -26,7 +26,7 @@ default_args = {
 
 # DAG definition
 @dag(
-    dag_id='etl_sp500_price_history_dag',
+    dag_id='etl_raw_sp500_price_history_dag',
     schedule= '@daily', # Monthly schedule
     start_date=pendulum.datetime(2025, 1, 1, tz="Asia/Bangkok"),
     catchup=False,
