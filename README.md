@@ -26,8 +26,11 @@ stock market data using Apache Airflow, CeleryExecutor, PostgreSQL, and Docker.
 ## How to Run
 ```bash
 docker-compose up -d
+bash
+```
 
 
-## How to Run
-```bash
-docker-compose up -d
+
+## 👤 Author
+**Jumponpatha Chaimongkonrojna**
+Data Engineer | AI Engineer (Data Infrastructure)
