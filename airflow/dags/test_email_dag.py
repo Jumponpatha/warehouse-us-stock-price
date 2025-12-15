@@ -109,7 +109,7 @@ def send_failure_status_email(context):
         to=["jumponpat59@gmail.com"],
         subject=subject,
         html_content=html,
-        # from_email="Airflow Alert Email <no-replies@airflow.com>"
+        from_email="Airflow Alert Email <jumponpat59@gmail.com>"
     )
 
 

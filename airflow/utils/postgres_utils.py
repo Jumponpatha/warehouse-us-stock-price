@@ -55,3 +55,19 @@ def load_to_postgres(df: pd.DataFrame, table_name, schema, conn_string, if_exist
     except Exception as e:
         print(f"Failed to load data into {schema}.{table_name}: {e}", exc_info=True)
         raise
+
+def query_data_postgres(query: str) -> pd.DataFrame:
+    """
+    Execute a SQL query and return the results as a Pandas DataFrame.
+
+    Parameters:
+        query (str): SQL query to execute
+    Returns:
+        pd.DataFrame: Query results as DataFrame
+    """
+    try:
+        df = pd.read_sql_query(query, psql_conn)
+        return df
+    except Exception as e:
+        print(f"Query failed: {e}", exc_info=True)
+        raise

@@ -73,7 +73,11 @@ x-airflow-common:
     AIRFLOW__SMTP__SMTP_USER: jumponpat59@gmail.com
     AIRFLOW__SMTP__SMTP_PASSWORD: ${SMTP_PASSWORD}
     AIRFLOW__SMTP__SMTP_PORT: 587
-    AIRFLOW__SMTP__SMTP_MAIL_FROM: Airflow Alert Email <no-replies@airflow.com>
+    AIRFLOW__SMTP__SMTP_MAIL_FROM: jumponpat59@gmail.com
+    AIRFLOW__METRICS__STATSD_ON: True
+    AIRFLOW__METRICS__STATSD_HOST: statsd-exporter
+    AIRFLOW__METRICS__STATSD_PORT: 9125
+    AIRFLOW__METRICS__STATSD_PREFIX: airflow
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
     # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
@@ -398,6 +402,83 @@ services:
       - ./notebooks:/home/jovyan/work
       - ./data:/home/jovyan/work/data
 
+  # statsd-exporter:
+  #   image: prom/statsd-exporter:v0.24.0
+  #   container_name: statsd-exporter
+  #   volumes:
+  #     - ./statsd/statsd.yaml:/home/statsd-mapping-configs.yaml
+  #   entrypoint: ["/bin/sh", "-c", "--"]
+  #   command: ["statsd_exporter --statsd.listen-udp=:9125 --web.listen-address=:9102 --log.level debug --statsd.mapping-config=/home/statsd-mapping-configs.yaml"]
+  #   ports:
+  #     - 9102:9102
+  #     - 9125:9125
+  #   expose:
+  #     - 9125/udp
+  #   restart: always
+
+  # prometheus:
+  #   image: prom/prometheus:v2.37.9
+  #   container_name: prometheus
+  #   volumes:
+  #     - ./prometheus/:/etc/prometheus/
+  #     - ./prometheus/data/:/prometheus
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yaml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #     - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+  #     - '--web.console.templates=/usr/share/prometheus/consoles'
+  #     - '--web.external-url=${SERVER_PROMETHEUS_ADDRESS:-http://localhost:9090}'
+  #   ports:
+  #     - 9090:9090
+  #   restart: always
+
+  # grafana:
+  #   image: grafana/grafana:10.0.3-ubuntu
+  #   container_name: grafana
+  #   depends_on:
+  #     - prometheus
+  #   ports:
+  #     - 3000:3000
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=grafana
+  #     - GF_USERS_ALLOW_SIGN_UP=true
+  #   volumes:
+  #     - ./grafana/grafana_data:/var/lib/grafana
+  #     - ./grafana/etc/grafana/provisioning/dashboards/:/etc/grafana/provisioning/dashboards/
+  #     - ./grafana/config/etc/grafana/provisioning/datasources/:/etc/grafana/provisioning/datasources/
+  #     - ./grafana/config/var/lib/grafana/dashboards/:/var/lib/grafana/dashboards/
+  #     - ./grafana/config/var/lib/grafana/plugins/:/var/lib/grafana/plugins/
+
+  # alertmanager:
+  #   container_name: alertmanager
+  #   image: prom/alertmanager:v0.25.0
+  #   ports:
+  #     - 9093:9093
+  #   volumes:
+  #     - ./alertmanager:/etc/alertmanager/
+  #   command:
+  #     - '--config.file=/etc/alertmanager/config.yaml'
+  #     - '--storage.path=/alertmanager'
+  #     - '--web.external-url=${SERVER_ALERTMANAGER_ADDRESS:-http://localhost:9093}'
+  #   restart: always
+
+  # node-exporter:
+  #   image: prom/node-exporter:v1.6.1
+  #   volumes:
+  #     - /proc:/host/proc:ro
+  #     - /sys:/host/sys:ro
+  #     - /:/rootfs:ro
+  #     - /:/host
+  #   command:
+  #     - '--path.rootfs=/host'
+  #     - '--path.procfs=/host/proc'
+  #     - '--path.sysfs=/host/sys'
+  #     - --collector.filesystem.ignored-mount-points
+  #     - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+  #   ports:
+  #     - 9100:9100
+  #   restart: always
 volumes:
   postgres-db-volume:
   postgres-warehouse-volume:

@@ -3,8 +3,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from airflow.sdk import dag, task, Variable
 from airflow.providers.standard.operators.empty import EmptyOperator
-from utils.postgres_utils import load_to_postgres
-
+from utils.postgres_utils import load_to_postgres, query_data_postgres
 from utils.alert.email_alert import dag_failure_alert, dag_success_alert, dag_execute_callback
 
 # Environment Variables (set in docker-compose.yaml or Airflow Variables)
@@ -42,7 +41,11 @@ def etl_pipeline_dag():
     def extract_sp500_price_data_from_db_task():
         ''' Extract S&P 500 profile data from database '''
         print(f" Extracting S&P 500 price history data from source database... ")
-
+        query = """
+            SELECT * FROM raw_finance_stock.finance_stock_sp500_price_hist;
+            """
+        extracted_df = query_data_postgres(query)
+        return extracted_df
 
     @task
     def load_dividend_data_task(df):
@@ -54,12 +57,12 @@ def etl_pipeline_dag():
 
     # Call the ETL task
     start = EmptyOperator(task_id="start")
-    extract_data = extract_sp500_price_data_task()
-    loads_task = load_dividend_data_task(extract_data)
+    extract_data = extract_sp500_price_data_from_db_task()
+    # loads_task = load_dividend_data_task(extract_data)
     end = EmptyOperator(task_id="end")
 
     # Define task dependencies
-    start >> extract_data >> loads_task >> end
+    start >> extract_data >> end
 
 # Generate the DAG
 etl_pipeline_dag()
