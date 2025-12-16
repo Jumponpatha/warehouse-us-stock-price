@@ -4,8 +4,8 @@
 This project demonstrates an end-to-end data engineering platform for
 stock market data using Apache Airflow, CeleryExecutor, PostgreSQL, and Docker.
 
-## Architecture
-<!-- ![architecture](docs/architecture.png) -->
+## ETL Pipeline Architecture
+![architecture](docs/yahoo_finance_etl_pipeline.png)
 
 ## Data Warehouse Design
 <!-- ![dw](docs/dw_schema.png) -->

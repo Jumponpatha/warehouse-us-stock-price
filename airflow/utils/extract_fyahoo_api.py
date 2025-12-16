@@ -178,7 +178,7 @@ def extract_sp500_profile():
             #     "Officers_9_totalPay": info.get("companyOfficers")[9].get("totalPay"),
             # })
 
-        sp_profile_df = pd.DataFrame(data_list)
+            sp_profile_df = pd.DataFrame(data_list)
         return sp_profile_df
     except Exception as e:
         print(f"The ERROR is: {e}")
@@ -202,7 +202,7 @@ def extract_sp500_price_history():
 
             data_list.append(hist)
 
-        sp_price_history_df = pd.concat(data_list, ignore_index=True)
+            sp_price_history_df = pd.concat(data_list, ignore_index=True)
         return sp_price_history_df
     except Exception as e:
         print(f"The ERROR is: {e}")
