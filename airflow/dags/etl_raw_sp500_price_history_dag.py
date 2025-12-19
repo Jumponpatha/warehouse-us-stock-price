@@ -7,10 +7,6 @@ from utils.extract_fyahoo_api import extract_sp500_price_history
 from utils.postgres_utils import load_to_postgres
 from utils.alert.email_alert import dag_failure_alert, dag_success_alert, dag_execute_callback
 
-# Environment Variables (set in docker-compose.yaml or Airflow Variables)
-POSTGRES_ROOT_USERNAME=Variable.get("POSTGRES_ROOT_USERNAME")
-POSTGRES_ROOT_PASSWORD=Variable.get("POSTGRES_ROOT_PASSWORD")
-
 # Default arguments for the DAG
 default_args = {
     'owner': 'Jumponpatha | Data Engineer',
@@ -50,10 +46,9 @@ def etl_pipeline_dag():
     @task
     def load_dividend_data_task(df):
         ''' Load the transformed data into PostgreSQL (Data Warehouse) '''
-        table_name = "finance_stock_sp500_price_hist"
+        table_name = "raw_finance_stock_sp500_price_hist"
         schema = "raw_finance_stock"
-        conn_string = f"postgresql://{POSTGRES_ROOT_USERNAME}:{POSTGRES_ROOT_PASSWORD}@postgres-warehouse:5432/financial_stock_dw"
-        load_to_postgres(df, table_name, schema, conn_string, if_exists="replace") # Use 'replace' for demo; consider 'append' for production
+        load_to_postgres(df, table_name, schema, if_exists="replace") # Use 'replace' for demo; consider 'append' for production
 
     # Call the ETL task
     start = EmptyOperator(task_id="start")

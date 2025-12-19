@@ -59,8 +59,7 @@ def etl_pipeline_dag():
         ''' Load the transformed data into PostgreSQL (Data Warehouse) '''
         table_name = "finance_stock_dividend_history"
         schema = "raw_finance_stock"
-        conn_string = f"postgresql://{POSTGRES_ROOT_USERNAME}:{POSTGRES_ROOT_PASSWORD}@postgres-warehouse:5432/financial_stock_dw"
-        load_to_postgres(df, table_name, schema, conn_string, if_exists="replace") # Use 'replace' for demo; consider 'append' for production
+        load_to_postgres(df, table_name, schema, if_exists="replace") # Use 'replace' for demo; consider 'append' for production
 
     # Call the ETL task
     start = EmptyOperator(task_id="start")

@@ -1,27 +1,34 @@
-from sqlalchemy import create_engine
-import psycopg2
 import pandas as pd
+import psycopg2
+from airflow.sdk import Variable
+from sqlalchemy import create_engine, inspect
 
-# Correct connection string for SQLAlchemy
-conn_string = "postgresql://bigdata_jchai:bigdata_password8075jcci@postgres-warehouse:5432/financial_stock_dw"
+# Create PostgreSQL Connection
+def get_postgres_connection():
+    """
+    Establish a connection to the PostgreSQL database using SQLAlchemy.
+    """
 
-# Create SQLAlchemy engine
-db = create_engine(conn_string)
-psql_conn = db.connect()
+    # Environment Variables (set in docker-compose.yaml or Airflow Variables)
+    POSTGRES_ROOT_USERNAME = Variable.get("POSTGRES_ROOT_USERNAME")
+    POSTGRES_ROOT_PASSWORD = Variable.get("POSTGRES_ROOT_PASSWORD")
 
-# Psycopg2 connection (still fine)
-conn = psycopg2.connect(
-    dbname="financial_stock_dw",
-    user="bigdata_jchai",
-    password="bigdata_password8075jcci",
-    host="postgres-warehouse",
-    port="5432"
-)
+    POSTGRES_HOST = "postgres-warehouse"
+    POSTGRES_PORT = 5432
+    POSTGRES_DB = "financial_stock_dw"
 
-conn.autocommit = True
-cursor = conn.cursor()
+    # Correct connection string for SQLAlchemy
+    conn_string = (
+        f"postgresql+psycopg2://{POSTGRES_ROOT_USERNAME}:"
+        f"{POSTGRES_ROOT_PASSWORD}@{POSTGRES_HOST}:"
+        f"{POSTGRES_PORT}/{POSTGRES_DB}"
+    )
 
-def load_to_postgres(df: pd.DataFrame, table_name, schema, conn_string, if_exists):
+    # Create SQLAlchemy engine
+    return create_engine(conn_string, pool_pre_ping=True)
+
+
+def load_to_postgres(df: pd.DataFrame, table_name, schema, if_exists):
     """
     Load a Pandas DataFrame into a PostgreSQL table using SQLAlchemy.
 
@@ -37,17 +44,15 @@ def load_to_postgres(df: pd.DataFrame, table_name, schema, conn_string, if_exist
         print(f"No data to load into {table_name}. Skipping.")
         return
 
-    if conn_string is None:
-        raise ValueError("Connection string must be provided")
-
     try:
-        engine = create_engine(conn_string)
+        engine = get_postgres_connection()
         df.to_sql(
             name=table_name,
             con=engine,
             schema=schema,
             if_exists=if_exists,
             index=False,
+            chunksize=50_000,
             method='multi'  # batch insert for performance
         )
         print(f"Loaded {len(df)} rows into {schema}.{table_name} successfully.")
@@ -65,9 +70,71 @@ def query_data_postgres(query: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Query results as DataFrame
     """
+
     try:
-        df = pd.read_sql_query(query, psql_conn)
+        engine = get_postgres_connection()
+        df = pd.read_sql_query(query, engine)
+        print(f"The data was successfully queried.")
+        print(f"DataFrame Shape: {df.shape}")
         return df
     except Exception as e:
         print(f"Query failed: {e}", exc_info=True)
         raise
+
+def read_data_postgres(table_name: str, schema: str) -> pd.DataFrame:
+    """
+    Execute a SQL query and return the results as a list of tuples.
+
+    Parameters:
+        query (str): SQL query to execute
+    """
+    engine = get_postgres_connection()
+    try:
+        df = pd.read_sql_table(
+                table_name=table_name,
+                con=engine,
+                schema=schema, # change if needed
+                chunksize=50_000,
+                index=False,
+                method="multi",
+            )
+        print(f"The data was successfully read.")
+        print(f"The {table_name} table has {df.shape[0]} rows and {df.shape[1]} columns.")
+        return df
+    except Exception as e:
+        print(f"Failed to read data from {schema}.{table_name}: {e}", exc_info=True)
+        raise
+
+def ddl_sql_postgres(ddl_statement: str):
+    """
+    Execute a DDL statement (e.g., CREATE TABLE) in PostgreSQL.
+
+    Parameters:
+        ddl_statement (str): DDL SQL statement to execute
+    """
+
+    try:
+        engine = get_postgres_connection()
+        with engine.connect() as connection:
+            connection.execute(ddl_statement)
+        print("DDL statement executed successfully.")
+    except Exception as e:
+        print(f"Failed to execute DDL statement: {e}", exc_info=True)
+        raise
+
+def table_exists(table_name: str, schema: str) -> bool:
+    """
+    Docstring for table_exists
+
+    :param engine: Description
+    :param table_name: Description
+    :type table_name: str
+    :param schema: Description
+    :type schema: str
+    :return: Description
+    :rtype: bool
+    """
+
+    engine = get_postgres_connection()
+    inspector = inspect(engine)
+    return inspector.has_table(table_name, schema=schema)

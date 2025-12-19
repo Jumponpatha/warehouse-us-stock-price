@@ -3,12 +3,8 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from airflow.sdk import dag, task, Variable
 from airflow.providers.standard.operators.empty import EmptyOperator
-from utils.postgres_utils import load_to_postgres, query_data_postgres
+from utils.postgres_utils import load_to_postgres, query_data_postgres, ddl_sql_postgres, table_exists
 from utils.alert.email_alert import dag_failure_alert, dag_success_alert, dag_execute_callback
-
-# Environment Variables (set in docker-compose.yaml or Airflow Variables)
-POSTGRES_ROOT_USERNAME=Variable.get("POSTGRES_ROOT_USERNAME")
-POSTGRES_ROOT_PASSWORD=Variable.get("POSTGRES_ROOT_PASSWORD")
 
 # Default arguments for the DAG
 default_args = {
@@ -40,29 +36,85 @@ def etl_pipeline_dag():
     @task
     def extract_sp500_price_data_from_db_task():
         ''' Extract S&P 500 profile data from database '''
-        print(f" Extracting S&P 500 price history data from source database... ")
+        print(f" Extracting S&P 500 price history data from raw zone ... ")
         query = """
-            SELECT * FROM raw_finance_stock.finance_stock_sp500_price_hist;
+                SELECT "Date", "Open", "High", "Low",
+                        "Close", "Volume", "Dividends",
+                        "Stock Splits", "Symbol", "Ingested_Time"
+                FROM raw_finance_stock.finance_stock_sp500_price_hist;
             """
         extracted_df = query_data_postgres(query)
         return extracted_df
 
+    def ddl_sp500_price_history_staging_task(table_name: str, schema: str):
+        ''' Create staging table if not exists '''
+        print(f" Creating staging table if not exists ... ")
+
+        ddl_statement = f"""
+            CREATE TABLE IF NOT EXISTS {schema}.{table_name}
+                (
+                    EVENT_ID SERIAL PRIMARY KEY,
+                    SYMBOL VARCHAR(256),
+                    DATE TIMESTAMPTZ,
+                    OPEN VARCHAR(256),
+                    HIGH VARCHAR(256),
+                    LOW VARCHAR(256),
+                    CLOSE VARCHAR(256),
+                    VOLUME VARCHAR(256),
+                    DIVIDENDS VARCHAR(256),
+                    STOCK_SPLITS VARCHAR(256),
+                    PROCESSED_TIME TIMESTAMPTZ,
+                    INGESTED_TIME TIMESTAMPTZ
+                );
+        """
+        _ = ddl_sql_postgres(ddl_statement)
+        return
+    @task
+    def transform_sp500_price_data_task(df):
+        ''' Transform the extracted S&P 500 price history data '''
+
+        # Add Processed Time
+        print("Adding Processed Time and transforming data types ...")
+        processed_time = datetime.now(ZoneInfo("Asia/Bangkok"))
+        df["Processed_Time"] = processed_time
+        # Add Data Types
+        df["Volume"] = df["Volume"].astype("int64")
+        df["Dividends"] = df["Dividends"].astype("float64")
+        df["Stock Splits"] = df["Stock Splits"].astype("float64")
+
+        # Drop Duplicates
+        print("Removing Duplicates ...")
+        df = df.drop_duplicates()
+
+        # NULL Handling
+        print("Handling NULL values ...")
+        transformed_df = df.dropna(subset=["Date", "Close", "Symbol"])
+
+        print(f"Successfully transforming dataframe with {len(df)} rows.")
+        return transformed_df
+
     @task
     def load_dividend_data_task(df):
         ''' Load the transformed data into PostgreSQL (Data Warehouse) '''
-        table_name = "finance_stock_sp500_price_hist"
-        schema = "raw_finance_stock"
-        conn_string = f"postgresql://{POSTGRES_ROOT_USERNAME}:{POSTGRES_ROOT_PASSWORD}@postgres-warehouse:5432/financial_stock_dw"
-        load_to_postgres(df, table_name, schema, conn_string, if_exists="replace") # Use 'replace' for demo; consider 'append' for production
+        table_name = "staging_finance_stock_sp500_price_hist"
+        schema = "staging_finance_stock"
+        if table_exists(table_name, schema):
+            print("Table exists")
+        else:
+            print("Table does not exist")
+            ddl_sp500_price_history_staging_task(table_name, schema)
+        table_name = "staging_finance_stock_sp500_price_hist"
+        schema = "staging_finance_stock"
+        load_to_postgres(df, table_name, schema, if_exists="replace") # Use 'replace' for demo; consider 'append' for production
 
     # Call the ETL task
     start = EmptyOperator(task_id="start")
     extract_data = extract_sp500_price_data_from_db_task()
-    # loads_task = load_dividend_data_task(extract_data)
+    transform_data = transform_sp500_price_data_task(extract_data)
+    loads_task = load_dividend_data_task(transform_data)
     end = EmptyOperator(task_id="end")
 
     # Define task dependencies
-    start >> extract_data >> end
-
+    start >> extract_data >> transform_data >> loads_task >> end
 # Generate the DAG
 etl_pipeline_dag()
