@@ -23,13 +23,13 @@ default_args = {
 # DAG definition
 @dag(
     dag_id='etl_raw_sp500_price_history_dag',
-    schedule= '@daily', # Monthly schedule
+    schedule= '0 21 * * 1-5', # Daily schedule
     start_date=pendulum.datetime(2025, 1, 1, tz="Asia/Bangkok"),
     catchup=False,
     render_template_as_native_obj=True,
     tags=["Data Warehouse", "Postgres", "ETL", "S&P500","Price", "History", "Yahoo Finance"],
     default_args=default_args,
-    on_failure_callback=[dag_failure_alert] # Add custom alerts
+    on_failure_callback=dag_failure_alert # Add custom alerts
 )
 
 # Function to define the ETL pipeline DAG
@@ -44,7 +44,7 @@ def etl_pipeline_dag():
         return extracted_df
 
     @task
-    def load_dividend_data_task(df):
+    def load_data_task(df):
         ''' Load the transformed data into PostgreSQL (Data Warehouse) '''
         table_name = "raw_finance_stock_sp500_price_hist"
         schema = "raw_finance_stock"
@@ -53,7 +53,7 @@ def etl_pipeline_dag():
     # Call the ETL task
     start = EmptyOperator(task_id="start")
     extract_data = extract_sp500_price_data_task()
-    loads_task = load_dividend_data_task(extract_data)
+    loads_task = load_data_task(extract_data)
     end = EmptyOperator(task_id="end")
 
     # Define task dependencies

@@ -1,4 +1,5 @@
 import pandas as pd
+from sqlalchemy import text
 import psycopg2
 from airflow.sdk import Variable
 from sqlalchemy import create_engine, inspect
@@ -88,16 +89,18 @@ def read_data_postgres(table_name: str, schema: str) -> pd.DataFrame:
     Parameters:
         query (str): SQL query to execute
     """
-    engine = get_postgres_connection()
+
     try:
+        engine = get_postgres_connection()
         df = pd.read_sql_table(
                 table_name=table_name,
                 con=engine,
                 schema=schema, # change if needed
                 chunksize=50_000,
                 index=False,
-                method="multi",
+                method="multi"
             )
+
         print(f"The data was successfully read.")
         print(f"The {table_name} table has {df.shape[0]} rows and {df.shape[1]} columns.")
         return df
@@ -110,13 +113,13 @@ def ddl_sql_postgres(ddl_statement: str):
     Execute a DDL statement (e.g., CREATE TABLE) in PostgreSQL.
 
     Parameters:
-        ddl_statement (str): DDL SQL statement to execute
+        ddl_statement (str): DDL SQL statement to execute.
     """
 
     try:
         engine = get_postgres_connection()
         with engine.connect() as connection:
-            connection.execute(ddl_statement)
+            connection.execute(text(ddl_statement))
         print("DDL statement executed successfully.")
     except Exception as e:
         print(f"Failed to execute DDL statement: {e}", exc_info=True)
@@ -134,7 +137,11 @@ def table_exists(table_name: str, schema: str) -> bool:
     :return: Description
     :rtype: bool
     """
-
     engine = get_postgres_connection()
-    inspector = inspect(engine)
-    return inspector.has_table(table_name, schema=schema)
+
+    try:
+        inspector = inspect(engine)
+        exists = inspector.has_table(table_name, schema=schema)
+        return exists
+    finally:
+        engine.dispose()

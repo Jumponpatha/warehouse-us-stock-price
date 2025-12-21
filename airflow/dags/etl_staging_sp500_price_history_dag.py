@@ -22,13 +22,13 @@ default_args = {
 # DAG definition
 @dag(
     dag_id='etl_staging_sp500_price_history_dag',
-    schedule= '@daily', # Monthly schedule
+    schedule= '0 23 * * 1-5', # Daily schedule
     start_date=pendulum.datetime(2025, 1, 1, tz="Asia/Bangkok"),
     catchup=False,
     render_template_as_native_obj=True,
     tags=["Data Warehouse", "Postgres", "Staging", "ETL", "S&P500","Price", "History", "Yahoo Finance"],
     default_args=default_args,
-    on_failure_callback=[dag_failure_alert] # Add custom alerts
+    on_failure_callback=dag_failure_alert # Add custom alerts
 )
 
 # Function to define the ETL pipeline DAG
@@ -44,6 +44,8 @@ def etl_pipeline_dag():
                 FROM raw_finance_stock.finance_stock_sp500_price_hist;
             """
         extracted_df = query_data_postgres(query)
+        print(f" DataFrame Shape: {extracted_df.shape}")
+        print(f" DataFrame Columns: {extracted_df.columns.tolist()}")
         return extracted_df
 
     def ddl_sp500_price_history_staging_task(table_name: str, schema: str):
@@ -53,56 +55,82 @@ def etl_pipeline_dag():
         ddl_statement = f"""
             CREATE TABLE IF NOT EXISTS {schema}.{table_name}
                 (
-                    EVENT_ID SERIAL PRIMARY KEY,
-                    SYMBOL VARCHAR(256),
-                    DATE TIMESTAMPTZ,
-                    OPEN VARCHAR(256),
-                    HIGH VARCHAR(256),
-                    LOW VARCHAR(256),
-                    CLOSE VARCHAR(256),
-                    VOLUME VARCHAR(256),
-                    DIVIDENDS VARCHAR(256),
-                    STOCK_SPLITS VARCHAR(256),
-                    PROCESSED_TIME TIMESTAMPTZ,
-                    INGESTED_TIME TIMESTAMPTZ
+                    event_id SERIAL PRIMARY KEY,
+                    symbol VARCHAR(32),
+                    date TIMESTAMPTZ,
+                    open DOUBLE PRECISION,
+                    high DOUBLE PRECISION,
+                    low DOUBLE PRECISION,
+                    close DOUBLE PRECISION,
+                    dividends DOUBLE PRECISION,
+                    volume BIGINT,
+                    stock_splits DOUBLE PRECISION,
+                    processed_time TIMESTAMPTZ,
+                    ingested_time TIMESTAMPTZ
                 );
         """
-        _ = ddl_sql_postgres(ddl_statement)
-        return
+        ddl_sql_postgres(ddl_statement)
+        return True
+
     @task
     def transform_sp500_price_data_task(df):
         ''' Transform the extracted S&P 500 price history data '''
+        print("Transforming S&P 500 price history data ...")
+
+        # Rename Columns
+        df = df.rename(columns={
+            "Date": "date",
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume",
+            "Symbol": "symbol",
+            "Dividends": "dividends",
+            "Stock Splits": "stock_splits",
+            "Ingested_Time": "ingested_time",
+        })
 
         # Add Processed Time
         print("Adding Processed Time and transforming data types ...")
         processed_time = datetime.now(ZoneInfo("Asia/Bangkok"))
-        df["Processed_Time"] = processed_time
+        df["processed_time"] = processed_time
+
         # Add Data Types
-        df["Volume"] = df["Volume"].astype("int64")
-        df["Dividends"] = df["Dividends"].astype("float64")
-        df["Stock Splits"] = df["Stock Splits"].astype("float64")
+        df["volume"] = df["volume"].astype("int64")
+        df["close"] = df["close"].astype("float64")
 
-        # Drop Duplicates
-        print("Removing Duplicates ...")
-        df = df.drop_duplicates()
+        # NULL handling (business critical fields)
+        df = df.dropna(subset=["symbol", "date", "close"])
 
-        # NULL Handling
-        print("Handling NULL values ...")
-        transformed_df = df.dropna(subset=["Date", "Close", "Symbol"])
-
+        # SOFT DEDUPLICATION (latest wins)
+        transformed_df = (
+            df.sort_values(
+                by=["symbol", "date", "processed_time"],
+                ascending=[True, True, False]
+            )
+            .drop_duplicates(
+                subset=["symbol", "date"],
+                keep="first"
+            )
+        )
         print(f"Successfully transforming dataframe with {len(df)} rows.")
         return transformed_df
 
     @task
-    def load_dividend_data_task(df):
+    def load__data_task(df):
         ''' Load the transformed data into PostgreSQL (Data Warehouse) '''
         table_name = "staging_finance_stock_sp500_price_hist"
         schema = "staging_finance_stock"
+
+        # Check if table exists, if not create it
         if table_exists(table_name, schema):
             print("Table exists")
         else:
             print("Table does not exist")
             ddl_sp500_price_history_staging_task(table_name, schema)
+
+        # Load Data to Postgres
         table_name = "staging_finance_stock_sp500_price_hist"
         schema = "staging_finance_stock"
         load_to_postgres(df, table_name, schema, if_exists="replace") # Use 'replace' for demo; consider 'append' for production
@@ -111,7 +139,7 @@ def etl_pipeline_dag():
     start = EmptyOperator(task_id="start")
     extract_data = extract_sp500_price_data_from_db_task()
     transform_data = transform_sp500_price_data_task(extract_data)
-    loads_task = load_dividend_data_task(transform_data)
+    loads_task = load__data_task(transform_data)
     end = EmptyOperator(task_id="end")
 
     # Define task dependencies

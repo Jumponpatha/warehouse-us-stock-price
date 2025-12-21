@@ -29,7 +29,7 @@ default_args = {
     render_template_as_native_obj=True,
     tags=["Data Warehouse", "Postgres", "ETL", "S&P500","Profile", "Yahoo Finance"],
     default_args=default_args,
-    on_failure_callback=[dag_failure_alert] # Add custom alerts
+    on_failure_callback=dag_failure_alert # Add custom alerts
 )
 
 # Function to define the ETL pipeline DAG

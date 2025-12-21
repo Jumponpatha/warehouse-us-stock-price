@@ -6,7 +6,8 @@ from airflow.providers.standard.operators.empty import EmptyOperator
 from utils.extract_fyahoo_api import extract_dividends_data
 from utils.postgres_utils import load_to_postgres
 from utils.alert.email_alert import dag_failure_alert, dag_success_alert, dag_execute_callback
-
+import great_expectations as gx
+from great_expectations.checkpoint import UpdateDataDocsAction
 # Environment Variables (set in docker-compose.yaml or Airflow Variables)
 POSTGRES_ROOT_USERNAME=Variable.get("POSTGRES_ROOT_USERNAME")
 POSTGRES_ROOT_PASSWORD=Variable.get("POSTGRES_ROOT_PASSWORD")
