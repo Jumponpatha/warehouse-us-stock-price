@@ -2,9 +2,11 @@ import pendulum
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from airflow.sdk import dag, task, Variable
+import great_expectations as gx
+from great_expectations.checkpoint import UpdateDataDocsAction
 from airflow.providers.standard.operators.empty import EmptyOperator
 from utils.postgres_utils import load_to_postgres, query_data_postgres, ddl_sql_postgres, table_exists
-from utils.alert.email_alert import dag_failure_alert, dag_success_alert, dag_execute_callback
+from utils.alert.email_alert import dag_failure_alert
 
 # Default arguments for the DAG
 default_args = {
@@ -28,7 +30,7 @@ default_args = {
     render_template_as_native_obj=True,
     tags=["Data Warehouse", "Postgres", "Staging", "ETL", "S&P500","Price", "History", "Yahoo Finance"],
     default_args=default_args,
-    on_failure_callback=dag_failure_alert # Add custom alerts
+    # on_failure_callback=[dag_failure_alert] # Add custom alerts
 )
 
 # Function to define the ETL pipeline DAG
@@ -47,30 +49,6 @@ def etl_pipeline_dag():
         print(f" DataFrame Shape: {extracted_df.shape}")
         print(f" DataFrame Columns: {extracted_df.columns.tolist()}")
         return extracted_df
-
-    def ddl_sp500_price_history_staging_task(table_name: str, schema: str):
-        ''' Create staging table if not exists '''
-        print(f" Creating staging table if not exists ... ")
-
-        ddl_statement = f"""
-            CREATE TABLE IF NOT EXISTS {schema}.{table_name}
-                (
-                    event_id SERIAL PRIMARY KEY,
-                    symbol VARCHAR(32),
-                    date TIMESTAMPTZ,
-                    open DOUBLE PRECISION,
-                    high DOUBLE PRECISION,
-                    low DOUBLE PRECISION,
-                    close DOUBLE PRECISION,
-                    dividends DOUBLE PRECISION,
-                    volume BIGINT,
-                    stock_splits DOUBLE PRECISION,
-                    processed_time TIMESTAMPTZ,
-                    ingested_time TIMESTAMPTZ
-                );
-        """
-        ddl_sql_postgres(ddl_statement)
-        return True
 
     @task
     def transform_sp500_price_data_task(df):
@@ -117,8 +95,70 @@ def etl_pipeline_dag():
         print(f"Successfully transforming dataframe with {len(df)} rows.")
         return transformed_df
 
+    # Define DDL task function
+    def ddl_sp500_price_history_staging_task(table_name: str, schema: str):
+        ''' Create staging table if not exists '''
+        print(f" Creating staging table if not exists ... ")
+
+        ddl_statement = f"""
+            CREATE TABLE IF NOT EXISTS {schema}.{table_name}
+                (
+                    event_id SERIAL PRIMARY KEY,
+                    symbol VARCHAR(32),
+                    date TIMESTAMPTZ,
+                    open DOUBLE PRECISION,
+                    high DOUBLE PRECISION,
+                    low DOUBLE PRECISION,
+                    close DOUBLE PRECISION,
+                    dividends DOUBLE PRECISION,
+                    volume BIGINT,
+                    stock_splits DOUBLE PRECISION,
+                    processed_time TIMESTAMPTZ,
+                    ingested_time TIMESTAMPTZ
+                );
+        """
+
+        ddl_sql_postgres(ddl_statement)
+        return True
+
     @task
-    def load__data_task(df):
+    def validate_data_task(df):
+        import great_expectations as gx
+
+        print("Validating data with Great Expectations...")
+
+        context = gx.get_context(
+            context_root_dir="/opt/airflow/great_expectations"
+        )
+
+        datasource = context.sources.pandas_default
+        validator = datasource.read_dataframe(df)
+
+        # Expectations
+        validator.expect_column_values_to_not_be_null("symbol")
+        validator.expect_column_values_to_not_be_null("date")
+
+        validator.expect_compound_columns_to_be_unique(
+            column_list=["symbol", "date"]
+        )
+
+        validator.expect_column_values_to_be_between("close", min_value=0)
+
+        validator.expect_column_values_to_be_between("volume", min_value=0)
+
+        # Save expectations → CREATES YAML
+        validator.save_expectation_suite(expectation_suite_name="staging_sp500_price_history_suite")
+
+        # Validate
+        result = validator.validate()
+        if not result["success"]:
+            raise ValueError("GX validation failed")
+
+        return df
+
+
+    @task
+    def load_data_task(df):
         ''' Load the transformed data into PostgreSQL (Data Warehouse) '''
         table_name = "staging_finance_stock_sp500_price_hist"
         schema = "staging_finance_stock"
@@ -139,10 +179,11 @@ def etl_pipeline_dag():
     start = EmptyOperator(task_id="start")
     extract_data = extract_sp500_price_data_from_db_task()
     transform_data = transform_sp500_price_data_task(extract_data)
-    loads_task = load__data_task(transform_data)
+    validate_data = validate_data_task(transform_data)
+    load_task = load_data_task(validate_data)
     end = EmptyOperator(task_id="end")
 
     # Define task dependencies
-    start >> extract_data >> transform_data >> loads_task >> end
+    start >> extract_data >> transform_data >> validate_data >> load_task >> end
 # Generate the DAG
 etl_pipeline_dag()

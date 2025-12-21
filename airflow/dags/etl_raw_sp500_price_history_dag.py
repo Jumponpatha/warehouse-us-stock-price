@@ -5,7 +5,7 @@ from airflow.sdk import dag, task, Variable
 from airflow.providers.standard.operators.empty import EmptyOperator
 from utils.extract_fyahoo_api import extract_sp500_price_history
 from utils.postgres_utils import load_to_postgres
-from utils.alert.email_alert import dag_failure_alert, dag_success_alert, dag_execute_callback
+from utils.alert.email_alert import dag_failure_alert
 
 # Default arguments for the DAG
 default_args = {
