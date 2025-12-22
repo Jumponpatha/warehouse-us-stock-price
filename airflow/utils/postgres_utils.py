@@ -4,7 +4,6 @@ import psycopg2
 from airflow.sdk import Variable
 from sqlalchemy import create_engine, inspect,  MetaData, Table
 from sqlalchemy.dialects.postgresql import insert
-from utils.postgres_utils import get_engine
 
 # Create PostgreSQL Connection
 def get_postgres_connection():
@@ -150,7 +149,7 @@ def table_exists(table_name: str, schema: str) -> bool:
 
 
 def insert_if_not_exists(df, table_name, schema):
-    engine = get_engine()
+    engine = get_postgres_connection()
     metadata = MetaData(schema=schema)
 
     table = Table(table_name, metadata,autoload_with=engine)
