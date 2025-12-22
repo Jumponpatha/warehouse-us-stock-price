@@ -5,8 +5,7 @@ from airflow.sdk import dag, task, Variable
 import great_expectations as gx
 from great_expectations.checkpoint import UpdateDataDocsAction
 from airflow.providers.standard.operators.empty import EmptyOperator
-from utils.postgres_utils import load_to_postgres, query_data_postgres, ddl_sql_postgres, table_exists
-from utils.alert.email_alert import dag_failure_alert
+from utils.postgres_utils import query_data_postgres, ddl_sql_postgres, table_exists, insert_if_not_exists
 
 # Default arguments for the DAG
 default_args = {
@@ -114,7 +113,8 @@ def etl_pipeline_dag():
                     volume BIGINT,
                     stock_splits DOUBLE PRECISION,
                     processed_time TIMESTAMPTZ,
-                    ingested_time TIMESTAMPTZ
+                    ingested_time TIMESTAMPTZ,
+                CONSTRAINT uq_sp500_symbol_date UNIQUE (symbol, date)
                 );
         """
 
@@ -123,38 +123,38 @@ def etl_pipeline_dag():
 
     @task
     def validate_data_task(df):
-        import great_expectations as gx
-
         print("Validating data with Great Expectations...")
 
         context = gx.get_context(
-            context_root_dir="/opt/airflow/great_expectations"
+            context_root_dir="/opt/airflow/great_expectations/"
         )
 
         datasource = context.sources.pandas_default
         validator = datasource.read_dataframe(df)
 
-        # Expectations
         validator.expect_column_values_to_not_be_null("symbol")
         validator.expect_column_values_to_not_be_null("date")
 
         validator.expect_compound_columns_to_be_unique(
-            column_list=["symbol", "date"]
+            ["symbol", "date"]
         )
 
-        validator.expect_column_values_to_be_between("close", min_value=0)
+        validator.expect_column_values_to_be_between(
+            "close", min_value=0
+        )
 
-        validator.expect_column_values_to_be_between("volume", min_value=0)
+        validator.expect_column_values_to_be_between(
+            "volume", min_value=0
+        )
 
-        # Save expectations → CREATES YAML
-        validator.save_expectation_suite(expectation_suite_name="staging_sp500_price_history_suite")
+        result = validator.validate(result_format="SUMMARY")
 
-        # Validate
-        result = validator.validate()
-        if not result["success"]:
-            raise ValueError("GX validation failed")
+        if not result.success:
+            raise ValueError("Great Expectations validation failed")
 
+        print("Great Expectations validation passed")
         return df
+
 
 
     @task
@@ -173,7 +173,7 @@ def etl_pipeline_dag():
         # Load Data to Postgres
         table_name = "staging_finance_stock_sp500_price_hist"
         schema = "staging_finance_stock"
-        load_to_postgres(df, table_name, schema, if_exists="replace") # Use 'replace' for demo; consider 'append' for production
+        insert_if_not_exists(df, table_name, schema)
 
     # Call the ETL task
     start = EmptyOperator(task_id="start")

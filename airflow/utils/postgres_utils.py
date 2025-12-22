@@ -2,7 +2,9 @@ import pandas as pd
 from sqlalchemy import text
 import psycopg2
 from airflow.sdk import Variable
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect,  MetaData, Table
+from sqlalchemy.dialects.postgresql import insert
+from utils.postgres_utils import get_engine
 
 # Create PostgreSQL Connection
 def get_postgres_connection():
@@ -145,3 +147,19 @@ def table_exists(table_name: str, schema: str) -> bool:
         return exists
     finally:
         engine.dispose()
+
+
+def insert_if_not_exists(df, table_name, schema):
+    engine = get_engine()
+    metadata = MetaData(schema=schema)
+
+    table = Table(table_name, metadata,autoload_with=engine)
+
+    insert_stmt = insert(table).values(df.to_dict(orient="records"))
+
+    do_nothing_stmt = insert_stmt.on_conflict_do_nothing(
+        index_elements=["symbol", "date"]
+    )
+
+    with engine.begin() as conn:
+        conn.execute(do_nothing_stmt)
