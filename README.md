@@ -18,9 +18,9 @@ stock market data using Apache Airflow, CeleryExecutor, PostgreSQL, and Docker.
 
 ## Tech Stack
 - Apache Airflow 3.x (CeleryExecutor)
-- PostgreSQL
-- Redis
+- PostgreSQL & PgAdmin
 - Docker & Docker Compose
+- GreatExpectation
 - Jupyter Notebook
 
 ## How to Run
@@ -31,6 +31,6 @@ bash
 
 
 
-## 👤 Author
+## Author
 **Jumponpatha Chaimongkonrojna**
 Data Engineer | AI Engineer (Data Infrastructure)
